@@ -1,0 +1,312 @@
+; MIT License
+; 
+; Copyright (c) 2023 Daniel Robertson
+; 
+; Permission is hereby granted, free of charge, to any person obtaining a copy
+; of this software and associated documentation files (the "Software"), to deal
+; in the Software without restriction, including without limitation the rights
+; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+; copies of the Software, and to permit persons to whom the Software is
+; furnished to do so, subject to the following conditions:
+; 
+; The above copyright notice and this permission notice shall be included in all
+; copies or substantial portions of the Software.
+; 
+; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+; SOFTWARE.
+
+; This program pulls a 32-bit integer from application code and uses
+; it to set the gain on the HX711. If an integer is not provided, the
+; previously provided integer is used. A default integer of 0
+; corresponding to a gain of 128 is used until an integer is provided.
+; The integer provided should be in the range 0 to 2, inclusive.
+; 
+; This program constantly and automatically refills the ISR with the
+; newest value from the HX711 without providing a gain value from
+; application code.
+; 
+; The lower 24 bits contain the value from the HX711. The next (upper)
+; bits should all be 0, but in any case should be ignored by
+; application code.
+; 
+; Details are given on page 5 of the HX711's datasheet.
+; 
+; NOTES:
+; 
+; 1. This program assumes the state machine is running at 10MHz. Each
+; instruction/cycle is therefore 100ns (0.1us).
+; 
+; 2. The 'x' register is used to store the last count of bits to read
+; and to preload the OSR with if the OSR is empty. See pg. 350 of the
+; RP2040 datasheet for details about this when the 'noblock' option is
+; given.
+; 
+; 3. The 'y' register is used to as the decrement counter for the bit
+; read counter. This variable is 0-based.
+; 
+; 4. When running in serial, there is an overlap between T2 and T3-T4.
+; That is to say, the data pin can be read from 100ns after the clock
+; pin has gone high. Given each bit is read in serial, the T2 delay is
+; not needed.
+; 
+; 5. With the state machine running at 10MHz:
+; 
+; T1: With no delay following the wait instruction (ie. []), and
+; assuming the the next instruction executes immediately after the wait
+; condition is met, the clock pin will go high following that second
+; instruction (ie. set pins, 1 [T3 - 1]). The set pins, 1 portion of
+; the instruction will take one cycle - 100ns - which is the absolute
+; minimum for T1 according to the HX711 datasheet.
+; 
+; T2: A T2 delay is still unneeded due to the inherent delays in
+; reading the data pin and jmp instruction.
+; 
+; 6. There is a small speedup by side-setting on the gain loop jmp
+; instruction.
+; 
+.program hx711_reader
+
+.define PUBLIC HZ                   10000000
+
+.define LOW                         0
+.define HIGH                        1
+
+.define READ_BITS                   23  ; 24 bits to read from HX711 (this is 0-based).
+.define DEFAULT_GAIN                0   ; Default gain (0=128, 1=32, 2=64).
+.define GAIN_BITS                   32
+.define T3                          2   ; 200ns
+.define T4                          2   ; 200ns
+
+.side_set 1 opt             ; Side set on the clock pin.
+
+set x, DEFAULT_GAIN         ; Set an initial default gain (this is 0-based).
+
+pull noblock                ; Pull in gain from application, but don't block.
+                            ; The effect is that if the TX FIFO is empty, the
+                            ; OSR is loaded with the x register - the default.
+
+out x, GAIN_BITS            ; Copy the OSR contents into the x register. If
+                            ; the default is used, this is effectively a NOP.
+
+.wrap_target
+wrap_target:
+
+set y, READ_BITS            ; Read y number of bits. This is 0-based.
+
+wait LOW pin 0              ; Wait until data pin falling edge.
+
+bitloop:
+    set pins, HIGH          ; Set rising edge of clock pin.
+    in pins, 1              ; Read bit from data pin into ISR. This will also
+                            ; act as a 100ns delay for the clock pin high time.
+    jmp y-- bitloop side LOW [T4 - 1] ; Keep jumping back to bitloop while y > 0,
+                            ; also set the clock pin falling edge and delay for
+                            ; 100ns after side-setting the clock pin before
+                            ; looping or falling through to ensure a minimum
+                            ; low clock pin for 200ns.
+
+                            ; At this point, all 24 bits have been read
+                            ; and can be pushed back to the application. A
+                            ; manual 'push noblock' is not used in favour of
+                            ; autopush, which is configured in the init
+                            ; function below.
+
+                            ; Defer obtaining the gain from the application
+                            ; until the last moment. So:
+
+    pull noblock side HIGH  ; Pull in any data if it's available, but don't
+                            ; wait if there isn't any. If no data is there,
+                            ; preload from x (this is what noblock does).
+                            ; Also side-set the clock pin for the rising edge
+                            ; of the 25th pulse.
+
+    out x, GAIN_BITS        ; 
+                            ; x will also
+                            ; persist after the wrap loop. This instruction
+                            ; doubles as a T3 delay for the 25th clock pulse.
+
+    jmp !x wrap_target side LOW ; If x is 0 - meaning a gain of 128 - we
+                            ; can immediately jump back to the start. We can
+                            ; also side-set the falling edge of the clock pin
+                            ; for the 25th clock pulse.
+
+                            ; If execution has fallen-through to here, the gain
+                            ; is either 1 (32) or 2 (64). But if execution has
+                            ; jumped back to wrap_target, copying x into y is
+                            ; not needed. So:
+
+    mov y, x                ; Copy x into y. y will hold the number of clock
+                            ; pulses minus 1 to be used as the following loop
+                            ; counter. This instruction doubles as a T4 delay
+                            ; for the falling edge of the 25th clock pulse (
+                            ; which is only really relevant to 26+ clock
+                            ; pulses).
+
+gainloop:
+    set pins, HIGH [T3 - 1] ; Set clock pin high and delay to ensure a minimum
+                            ; high clock pin for 200ns.
+    jmp y-- gainloop side LOW [T4 - 1] ; Keep pulsing clock pin while y > 0.
+                            ; Also use this to side-set the falling edge of
+                            ; the clock pin and delay for the minimum required
+                            ; time. If this is the final loop, the extra delay
+                            ; is superfluous but ultimately does not matter
+                            ; because of the inherent delay in waiting on the
+                            ; data pin again once the program wraps.
+
+                            ; No need to read from the data pin.
+
+                            ; At this point, the gain has been set for the
+                            ; next reading, so go back to the start.
+
+.wrap
+
+% c-sdk {
+// MIT License
+// 
+// Copyright (c) 2023 Daniel Robertson
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <assert.h>
+#include <stddef.h>
+#include "hardware/clocks.h"
+#include "hardware/pio.h"
+#include "hardware/structs/clocks.h"
+#include "hx711.h"
+
+void hx711_reader_pio_init(hx711_t* const hx) {
+
+    assert(hx != NULL);
+    assert(hx->_pio != NULL);
+
+    pio_gpio_init(
+        hx->_pio,
+        hx->_clock_pin);
+
+    //clock pin setup
+    pio_sm_set_out_pins(
+        hx->_pio,
+        hx->_reader_sm,
+        hx->_clock_pin,
+        1);
+
+    pio_sm_set_set_pins(
+        hx->_pio,
+        hx->_reader_sm,
+        hx->_clock_pin,
+        1);
+
+    pio_sm_set_consecutive_pindirs(
+        hx->_pio,
+        hx->_reader_sm,
+        hx->_clock_pin,
+        1,
+        true);
+
+    //data pin setup
+    pio_gpio_init(
+        hx->_pio,
+        hx->_data_pin);
+
+    pio_sm_set_in_pins(
+        hx->_pio,
+        hx->_reader_sm,
+        hx->_data_pin);
+
+    pio_sm_set_consecutive_pindirs(
+        hx->_pio,
+        hx->_reader_sm,
+        hx->_data_pin,
+        1,
+        false);
+
+}
+
+void hx711_reader_program_init(hx711_t* const hx) {
+
+    assert(hx != NULL);
+    assert(hx->_pio != NULL);
+
+    pio_sm_config cfg = hx711_reader_program_get_default_config(
+        hx->_reader_offset);
+
+    const float div = (float)(clock_get_hz(clk_sys)) / (uint)hx711_reader_HZ;
+
+    sm_config_set_clkdiv(
+        &cfg,
+        div);
+
+    sm_config_set_set_pins(
+        &cfg,
+        hx->_clock_pin,
+        1);
+
+    sm_config_set_out_pins(
+        &cfg,
+        hx->_clock_pin,
+        1);
+
+    sm_config_set_sideset_pins(
+        &cfg,
+        hx->_clock_pin);
+
+    sm_config_set_in_pins(
+        &cfg,
+        hx->_data_pin);
+
+    /**
+     * Why enable autopush?
+     *
+     * "The state machine keeps an eye on the total amount of data shifted into the ISR, and on the in which reaches or
+     *  breaches a total shift count of 32 (or whatever number you have configured), the ISR contents, along with the new data
+     *  from the in. goes straight to the RX FIFO. The ISR is cleared to zero in the same operation."
+     *  - Raspberry Pi Pico C/C++ SDK pg. 45
+     *
+     * When manually pushing using noblock, the FIFO contents are NOT changed.
+     * 
+     * "The PIO assembler sets the Block bit by default. If the Block bit is not set, the PUSH does not stall on a full RX FIFO, instead
+     * continuing immediately to the next instruction. The FIFO state and contents are unchanged when this happens. The ISR
+     * is still cleared to all-zeroes, and the FDEBUG_RXSTALL flag is set (the same as a blocking PUSH or autopush to a full RX FIFO)
+     * to indicate data was lost."
+     * - Raspberry Pi Pico C/C++ SDK pg. 64
+     * 
+     * Manually pushing is not ideal. Application code should be able to look at the FIFO and assume
+     * that the value inside is the most up-to-date data available. Autopushing does this.
+     */
+    sm_config_set_in_shift(
+        &cfg,
+        false,            //false = shift in left
+        true,             //true = autopush enabled
+        HX711_READ_BITS); //autopush on 24 bits
+
+    pio_sm_clear_fifos(
+        hx->_pio,
+        hx->_reader_sm);
+
+    //store a copy of the configuration for resetting the sm
+    hx->_reader_prog_default_config = cfg;
+
+}
+
+%}
