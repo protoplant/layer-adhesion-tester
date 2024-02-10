@@ -11,7 +11,7 @@ The code is formatted as an Arduino Sketch, and is ready for loading into the Ar
 
 ##Routing and soldering the wires onto a protoboard
 
-Below is an image showing one way to hook up the load cell amp and the H-bridge motor driver:
+Below is an image showing one way to hook up the Pi Pico to the headers for the load cell amp and the motor driver:
 
 ![Photo of ProtoBoard Wire Routing](img/protoboard_layout.jpg)
 
