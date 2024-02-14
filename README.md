@@ -48,7 +48,3 @@ The advantages of arduino-pico core include the addition of printf() functions f
 
 
 
-The author of this code is very used to using the C "printf()" function to get output formatted just the way he wants it, all in one line.  Yes, the formatting codes for printf are pretty cryptic, and it can be argued that the "Arduino Way" of using Serial.print() on multiple lines is better for beginners.  However, this code uses printf and Earle Philhower's arduino-pico core library (linked to above) automagically routes stdout (ie. printf) thru the virtual serial port over USB. To enable this feature in the Arduino IDE, go to the "Tools" menu, go to the "Debug Port" sub-menu (about halfway down the list) and select "Serial" (see image below)
-
-![Enabling prinf output in Arduino IDE](img/printf_arduino_ide.png)
-
