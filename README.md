@@ -42,7 +42,11 @@ Here is what the finished circuit looks like all soldered together and ready to 
 
 If you don't have it already, the Arduino IDE can be [downloaded here](https://www.arduino.cc/en/software)
 
-The IDE does come with an Arduino library for Pi Pico "out of the box" but there is (in the author's humble opinion) a much better library that can easily be installed.  Just follow the [instructions here] to set up the Arduino IDE to compile the code in this repo as-is.
+The code in this repo uses an "external" Arduino core for the Raspberry Pi Pico called arduino-pico.  The Arduino IDE comes with a core for the Pi Pico called MBED-OS, but the arduino-pico core has many advantages and is well worth the trouble of installing it. Just follow the [instructions here](https://arduino-pico.readthedocs.io/en/latest/install.html) to set up the Arduino IDE with arduino-pico.
+
+The advantages of arduino-pico core include the addition of printf() functions for debugging and serial output, an EEPROM emulator (for persistent storage to flash) and lower memory usage.  [Here](https://github.com/earlephilhower/arduino-pico/discussions/246) is a more in-depth discussion of the differences in the two cores.
+
+
 
 The author of this code is very used to using the C "printf()" function to get output formatted just the way he wants it, all in one line.  Yes, the formatting codes for printf are pretty cryptic, and it can be argued that the "Arduino Way" of using Serial.print() on multiple lines is better for beginners.  However, this code uses printf and Earle Philhower's arduino-pico core library (linked to above) automagically routes stdout (ie. printf) thru the virtual serial port over USB. To enable this feature in the Arduino IDE, go to the "Tools" menu, go to the "Debug Port" sub-menu (about halfway down the list) and select "Serial" (see image below)
 
