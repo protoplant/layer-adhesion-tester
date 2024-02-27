@@ -38,13 +38,61 @@ Here is what the finished circuit looks like all soldered together and ready to 
 ![Photo of Finished Circuit](img/components_soldered.jpg)
 
 
-## Compiling the code
+# Compiling the code
 
 If you don't have it already, the Arduino IDE can be [downloaded here](https://www.arduino.cc/en/software)
 
 The code in this repo uses an "external" Arduino core for the Raspberry Pi Pico called arduino-pico.  The Arduino IDE comes with a core for the Pi Pico called MBED-OS, but the arduino-pico core has many advantages and is well worth the trouble of installing it. Just follow the [instructions here](https://arduino-pico.readthedocs.io/en/latest/install.html) to set up the Arduino IDE with arduino-pico.
 
 The advantages of arduino-pico core include the addition of printf() functions for debugging and serial output, an EEPROM emulator (for persistent storage to flash) and lower memory usage.  [Here](https://github.com/earlephilhower/arduino-pico/discussions/246) is a more in-depth discussion of the differences in the two cores.
+
+
+# Operation and Setup
+
+## USB Serial Command Line interface
+
+The device is controlled thru a "serial port emulator" that uses the USB port of the Pi Pico.  The Arduino IDE has a built in "serial monitor" that can be activated by clicking a button in the upper-right corner.  This works OK for testing things out, but it has the annoying property of sending a line of text at a time.  In other words, to send a command in Serial Monitor you need to select the "message box" at the top of the monitor, type in the single-letter command, and then hit the enter key.  If you are doing a lot of work with the menus and commands (especially testing the motor with "Manual Motor Control") you may find an alternate serial terminal program that just sends keystrokes without hitting the enter key every time (like PuTTY for Windows) much easier to work with.
+
+When the device is started up, plugged in, and the serial monitor is active, you should see a greeting and some menu options for interacting with the device.  When everything is set up and ready to go, you just need the "t" command to run the test.  Everything is automatic from there.  The test is normally done using an application called "Serial Plot" which will create a nice pretty chart of the data as it comes in.  (See the section below for details.)
+
+The other menu options are for setup and testing the device.  Use "v" to view the load cell data.  Send another "v" to turn it off again.  Also, the zero point of the load cell varies quite a bit with temperature, so you can use "z" to set the zero point.  (Note that every time you use "t" to test a sample, the load cell is automatically zeroed.)
+
+The "calibrate" function is optional, but recommended.  There are default values for the load cell in the code where it should be fairly accurate if you are using the same type of load cell in the parts list.  If you just want to compare different samples to each other, you can get away with using these defaults.  If you would like to calibrate your load cell, there is a section below describing the process.
+
+The "Manual Motor Control" option is for testing the linear actuator (making sure it works and goes the right direction.)  There are options for using PWM at different duty cycles to make the cylinder of the linear actuator move out at a slower rate.  Breaking the sample more slowly may yield more accurate results, but if the layer adhesion is very strong, it might not break at all at lower duty cycles.  In our testing, the full speed break was able to break every sample we tried, so that is how the code is configured by default.  Feel free to experiment with this, however.
+
+It should be noted that when the linear actuator is installed in the 3D printed frame, it can "crash" into the load cell, possibly damaging it.  So please be aware of this!  The code is set up by default to end the test before crashing, and it should work just fine if you are using the same linear actuator and same setup as designed.  But it would still be a good idea to test it with your setup before installing the linear actuator.
+
+
+## Calibrating the load cell
+
+If you are going to calibrate the load cell, it will be easier to do so before installing it into the frame.  Send the 'c' character to the device thru the USB serial port to enter the calibration sub-menu.  The current calibration values (Offset and Scale) are displayed above the "help menu."  If you have not calibrated the load cell before, these will be the default values of 11800 for offset and 20 for scale.  Make sure the load cell is sitting on a level surface, and that there is nothing on the load cell, and use the 'z' command to set the offset value (the zero point.)  Then, place your calibration weight onto the load cell and use the 'c' command to set the scale value.  At this point you need to use the 's' command to save the values to flash memory so that they will be used every time the device is powered up.  Note that the 'v' command (view data) can be use in the calibration sub menu to check the calibration before saving the values.  You could put a couple of objects of known weight on the load cell and make sure the number is close (the units are in grams) before saving the calibration values.
+
+At ProtoPlant we have several 500g calibration weights sitting around in various places to calibrate our equipment, so the calibration weight is set to 500g.  If you have, for example, a 1kg weight instead, simply change this number in the code.  The line of code is near the top of the sketch, and looks like this:
+```c
+#define CALIBRATION_MASS 500.0f     //  mass in grams of calibration weight
+```
+If you don't have any calibration weights handy, but you have a fairly accurate scale, one way get the job done is to find some dense object, put it on your scale to get the number of grams it weighs, put this number into the code for the CALIBRATION_MASS, compile and upload, and then calibrate the load cell with this same object.  Note that the heavier the object is, the more accurate the calibration will be.  Of course, we need to be practical - calibrating the load cell at full scale would require a 200kg calibration weight!  Anything over 200g should suffice.
+
+
+## Testing Printed Samples
+
+It's possible to just run tests with the Arduino IDE Serial Monitor.  The force numbers are output in a CSV-like format which can be copied-and-pasted into a .CSV file and then opened in a spreadsheet application for further plotting and analysis.  There are two numbers output for each sample.  The first number is the force in grams, and the second number is the maximum amount of force recorded during the test.  The "max value" is just a convenience so you don't have to go searching thru a long list of samples to find the largest one.
+
+Wait a minute... The "force in grams?"  What does THAT mean?  Grams is a unit of mass, not a unit of force!  OK, well, yes, but it seems intuitive to use a unit that most people are familiar with.  If you hold an object with X grams of mass on Planet Earth, you feel a force pulling down exactly proportional to that mass.  So it just kinda makes sense to us to use this pseudo-unit we call "grams of force."  Newtons are fig bars that you eat for a snack.  It would be rather easy to change the code and calibration to use any unit you want, however...
+
+Serial Monitor will get the job done, but it's much nicer to work with an application that records the data to a file without the select-copy-paste hassle.  (It seems difficult to select multiple pages of numbers in Serial Monitor.  It only wants to select the samples that fit on the screen.)  And wouldn't a chart graphed in real time as you are running a test be great?  Well, there is a free and open source program that does all of this and more called "SerialPlot."  It is available for Linux and Windows, and someone somewhere probably compiled it for Mac if you dig a little.
+
+Here is the [SerialPlot GitHub Page](https://github.com/hyOzd/serialplot)
+Here is where [SerialPlot binaries](https://hackaday.io/project/5334-serialplot-realtime-plotting-software) can be found
+
+Once you have SerialPlot installed and running, you'll have to do some setup tasks to get it ready to go.  To make this easier, there is a [SerialPlot "Settings" file](https://github.com/protoplant/layer-adhesion-tester/blob/main/serialplot.ini) in this repo that you can load into SerialPlot with the "Load Settings" menu option in the "File" menu.
+
+In the "Port" tab of SerialPlot, Select the port for the device and click the "Open" button.  Then select the "Commands" tab and click the top "Send" button on the right.  This will send the "test" command to the device and you should see it cycle thru the test sequence.  You should also be seeing the chart above updated in real time.
+
+There is another command (the bottom "Send" button) that you can use to abort a test sequence if necessary.  (The test sequence only takes a couple seconds, so you probably won't need to use this.)
+
+After a test, you can "Export CSV" to get the data into a handy format for further analysis.  If you want to know the max force for a trial, just mouse-over the chart (on the right side after the break) and note the topmost number.  Also, there is a "record" feature in SerialPlot where you could record several tests into one file.  Finally, there is a "Snapshot" feature in SerialPlot that is handy for comparing trials to each other.
 
 
 
