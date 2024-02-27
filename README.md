@@ -9,7 +9,7 @@ The code is formatted as an Arduino Sketch, and is ready for loading into the Ar
  
 # Building the Hardware
 
-## Sourcing the parts
+## Sourcing the Parts
 
 Raspberry Pi Picos can be bought online from several different places.  However, the protoboard used for the project is unique and a bit harder to find.  It's nice because it clearly labels the Pi Pico pins, it has the same layout as a small breadboard, and it allows one to solder the Pi Pico directly to the board without needing to add headers.  (It also has holes if you want to use a Pi Pico H with pre-soldered headers.)
 
@@ -25,20 +25,20 @@ An interesting experiment would be to build this device with [this load cell amp
 
 The H-bridge can be almost anything, even cooked up from scratch with parts you may already have lying around.  However, we found that the [DRV8871-based breakout from AdaFruit](https://www.adafruit.com/product/3190) fits this project perfectly.  By default, this board is current limited to 2 amps, which is just about perfect for this application.  That's plenty of power to break very strong test samples, yet not so much that you risk burning out the motor or melting wires.  
 
-## Routing and soldering the wires onto a protoboard
+## Routing and Soldering the Wires onto a Protoboard
 
 Below is an image showing one way to hook up the Pi Pico to the headers for the load cell amp and the motor driver:
 
 ![Photo of ProtoBoard Wire Routing](img/protoboard_layout.jpg)
 
-## Placement of load cell amp and H-bridge
+## Placement of Load Cell Amp and H-Bridge
 
 Here is what the finished circuit looks like all soldered together and ready to go:
 
 ![Photo of Finished Circuit](img/components_soldered.jpg)
 
 
-# Compiling the code
+# Compiling the Code
 
 If you don't have it already, the Arduino IDE can be [downloaded here](https://www.arduino.cc/en/software)
 
@@ -49,7 +49,7 @@ The advantages of arduino-pico core include the addition of printf() functions f
 
 # Operation and Setup
 
-## USB Serial Command Line interface
+## USB Serial Command Line Interface
 
 The device is controlled thru a "serial port emulator" that uses the USB port of the Pi Pico.  The Arduino IDE has a built in "serial monitor" that can be activated by clicking a button in the upper-right corner.  This works OK for testing things out, but it has the annoying property of sending a line of text at a time.  In other words, to send a command in Serial Monitor you need to select the "message box" at the top of the monitor, type in the single-letter command, and then hit the enter key.  If you are doing a lot of work with the menus and commands (especially testing the motor with "Manual Motor Control") you may find an alternate serial terminal program that just sends keystrokes without hitting the enter key every time (like PuTTY for Windows) much easier to work with.
 
@@ -57,16 +57,16 @@ When the device is started up, plugged in, and the serial monitor is active, you
 
 The other menu options are for setup and testing the device.  Use "v" to view the load cell data.  Send another "v" to turn it off again.  Also, the zero point of the load cell varies quite a bit with temperature, so you can use "z" to set the zero point.  (Note that every time you use "t" to test a sample, the load cell is automatically zeroed.)
 
-The "calibrate" function is optional, but recommended.  There are default values for the load cell in the code where it should be fairly accurate if you are using the same type of load cell in the parts list.  If you just want to compare different samples to each other, you can get away with using these defaults.  If you would like to calibrate your load cell, there is a section below describing the process.
+The "calibrate" function is optional, but recommended.  There are default values for the load cell in the code where it should be fairly accurate if you are using the same type of load cell we used.  If you just want to compare different samples to each other, you can get away with using these defaults.  If you would like to calibrate your load cell, there is a [section below](https://github.com/protoplant/layer-adhesion-tester?tab=readme-ov-file#calibrating-the-load-cell) describing the process.
 
 The "Manual Motor Control" option is for testing the linear actuator (making sure it works and goes the right direction.)  There are options for using PWM at different duty cycles to make the cylinder of the linear actuator move out at a slower rate.  Breaking the sample more slowly may yield more accurate results, but if the layer adhesion is very strong, it might not break at all at lower duty cycles.  In our testing, the full speed break was able to break every sample we tried, so that is how the code is configured by default.  Feel free to experiment with this, however.
 
 It should be noted that when the linear actuator is installed in the 3D printed frame, it can "crash" into the load cell, possibly damaging it.  So please be aware of this!  The code is set up by default to end the test before crashing, and it should work just fine if you are using the same linear actuator and same setup as designed.  But it would still be a good idea to test it with your setup before installing the linear actuator.
 
 
-## Calibrating the load cell
+## Calibrating the Load Cell
 
-If you are going to calibrate the load cell, it will be easier to do so before installing it into the frame.  Send the 'c' character to the device thru the USB serial port to enter the calibration sub-menu.  The current calibration values (Offset and Scale) are displayed above the "help menu."  If you have not calibrated the load cell before, these will be the default values of 11800 for offset and 20 for scale.  Make sure the load cell is sitting on a level surface, and that there is nothing on the load cell, and use the 'z' command to set the offset value (the zero point.)  Then, place your calibration weight onto the load cell and use the 'c' command to set the scale value.  At this point you need to use the 's' command to save the values to flash memory so that they will be used every time the device is powered up.  Note that the 'v' command (view data) can be use in the calibration sub menu to check the calibration before saving the values.  You could put a couple of objects of known weight on the load cell and make sure the number is close (the units are in grams) before saving the calibration values.
+If you are going to calibrate the load cell, it will be easier to do so before installing it into the frame.  Send the 'c' character to the device thru the USB serial port to enter the calibration sub-menu.  The current calibration values (Offset and Scale) are displayed above the "help menu."  If you have not calibrated the load cell before, these will be the default values of 11800 for offset and 20 for scale.  Make sure the load cell is sitting on a level surface, and that there is nothing on the load cell, and use the 'z' command to set the offset value (the zero point.)  Then, place your calibration weight onto the load cell and use the 'c' command to set the scale value.  At this point you need to use the 's' command to save the values to flash memory so that they will be used every time the device is powered up.  Note that the 'v' command (view data) can be use in the calibration sub menu to check the calibration before saving the values.  (Put a couple of objects of known weight on the load cell and make sure the number is close - the units are in grams.)
 
 At ProtoPlant we have several 500g calibration weights sitting around in various places to calibrate our equipment, so the calibration weight is set to 500g.  If you have, for example, a 1kg weight instead, simply change this number in the code.  The line of code is near the top of the sketch, and looks like this:
 ```c
